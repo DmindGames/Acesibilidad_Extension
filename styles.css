@@ -1,0 +1,3 @@
+.contrast {
+    filter: invert(100%) contrast(200%);
+  }
