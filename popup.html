@@ -1,13 +1,40 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-  <title>Accesibilidad</title>
-  <script defer src="popup.js"></script>
+    <title>Accesibilidad</title>
+    <script defer src="popup.js"></script>
+    <style>
+        .pinky {
+            width: 100px;
+        }
+
+        body {
+            background: white;
+            border-radius: 20px;
+            font-family: cursive;
+        }
+        span{
+            color: #e28e27;
+        }
+
+        button {
+            border-radius: 5px;
+            background: #eca043;
+            color: white;
+            font-size: 16px;
+            padding: 10px;
+            border: solid 1px #e28e27;
+        }
+    </style>
 </head>
+
 <body>
-  <h2>Accesibilidad</h2>
-  <button id="increase-font">Aumentar Fuente</button>
-  <button id="decrease-font">Reducir Fuente</button>
-  <button id="toggle-contrast">Modo Contraste</button>
+    <h2>Pinky asistencia de <span>Accesibilidad</span> </h2>
+    <img class="pinky" src="./PinkyAcces.png" alt="Pinky Accesibilidad">
+    <button id="increase-font">Aumentar Fuente (A+)</button>
+    <button id="decrease-font">Reducir Fuente (a-)</button>
+    <button id="toggle-contrast">Modo Contraste </button>
 </body>
+
 </html>
