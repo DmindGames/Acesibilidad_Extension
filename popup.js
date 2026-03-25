@@ -1,5 +1,9 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 const STORAGE_KEY = "a11ySettings";
+const SITE_RULES_KEY = "a11ySiteRules";
+const SITE_MODE_DEFAULT = "default";
+const SITE_MODE_ALWAYS = "always";
+const SITE_MODE_NEVER = "never";
 const DEFAULT_SETTINGS = {
   fontScale: 1,
   highContrast: false,
@@ -17,8 +21,22 @@ const dom = {
   letterSpacingValue: document.getElementById("letter-spacing-value"),
   highContrast: document.getElementById("high-contrast"),
   dyslexiaFriendly: document.getElementById("dyslexia-friendly"),
+  siteHost: document.getElementById("site-host"),
+  siteEnabled: document.getElementById("site-enabled"),
+  siteAlways: document.getElementById("site-always"),
+  siteNever: document.getElementById("site-never"),
+  resetSite: document.getElementById("reset-site"),
+  siteModeLabel: document.getElementById("site-mode-label"),
   reset: document.getElementById("reset-settings"),
   status: document.getElementById("status")
+};
+
+const state = {
+  activeTabId: null,
+  activeHost: "",
+  siteRules: {},
+  siteMode: SITE_MODE_DEFAULT,
+  isSupportedTab: true
 };
 
 function clampNumber(value, min, max, fallback) {
@@ -38,6 +56,56 @@ function sanitizeSettings(raw) {
     lineHeight: clampNumber(data.lineHeight, 1.2, 2.2, DEFAULT_SETTINGS.lineHeight),
     letterSpacing: clampNumber(data.letterSpacing, 0, 4, DEFAULT_SETTINGS.letterSpacing)
   };
+}
+
+function sanitizeSiteRules(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  const next = {};
+  Object.keys(raw).forEach((hostname) => {
+    const mode = raw[hostname];
+    if (mode === SITE_MODE_ALWAYS || mode === SITE_MODE_NEVER) {
+      next[hostname] = mode;
+    }
+  });
+
+  return next;
+}
+
+function resolveSiteMode(hostname, rules) {
+  if (!hostname) {
+    return SITE_MODE_DEFAULT;
+  }
+
+  const mode = rules[hostname];
+  if (mode === SITE_MODE_ALWAYS || mode === SITE_MODE_NEVER) {
+    return mode;
+  }
+
+  return SITE_MODE_DEFAULT;
+}
+
+function withSiteMode(hostname, mode, rules) {
+  const next = { ...rules };
+
+  if (!hostname || mode === SITE_MODE_DEFAULT) {
+    delete next[hostname];
+    return next;
+  }
+
+  next[hostname] = mode;
+  return next;
+}
+
+function parseHostnameFromUrl(urlString) {
+  try {
+    const url = new URL(String(urlString || ""));
+    return url.hostname || "";
+  } catch (_error) {
+    return "";
+  }
 }
 
 function tabsQuery(queryInfo) {
@@ -63,15 +131,15 @@ function tabsQuery(queryInfo) {
   });
 }
 
-function storageGet(key) {
+function storageGet(keyOrKeys) {
   return new Promise((resolve) => {
-    const response = api.storage.local.get(key);
+    const response = api.storage.local.get(keyOrKeys);
     if (response && typeof response.then === "function") {
       response.then(resolve).catch(() => resolve({}));
       return;
     }
 
-    api.storage.local.get(key, (result) => {
+    api.storage.local.get(keyOrKeys, (result) => {
       resolve(result || {});
     });
   });
@@ -134,6 +202,38 @@ function paintValues(settings) {
   dom.letterSpacingValue.textContent = `${settings.letterSpacing.toFixed(1)} px`;
 }
 
+function paintSiteState() {
+  if (!state.isSupportedTab || !state.activeHost) {
+    dom.siteHost.textContent = "Sitio no compatible";
+    dom.siteEnabled.checked = false;
+    dom.siteEnabled.disabled = true;
+    dom.siteAlways.disabled = true;
+    dom.siteNever.disabled = true;
+    dom.resetSite.disabled = true;
+    dom.siteModeLabel.textContent = "Abre un sitio http o https para usar control por dominio.";
+    return;
+  }
+
+  dom.siteHost.textContent = state.activeHost;
+  dom.siteEnabled.disabled = false;
+  dom.siteAlways.disabled = false;
+  dom.siteNever.disabled = false;
+  dom.resetSite.disabled = false;
+  dom.siteEnabled.checked = state.siteMode !== SITE_MODE_NEVER;
+
+  if (state.siteMode === SITE_MODE_ALWAYS) {
+    dom.siteModeLabel.textContent = "Estado: siempre aplicar en este dominio.";
+    return;
+  }
+
+  if (state.siteMode === SITE_MODE_NEVER) {
+    dom.siteModeLabel.textContent = "Estado: nunca aplicar en este dominio.";
+    return;
+  }
+
+  dom.siteModeLabel.textContent = "Estado: usa la configuracion global de la extension.";
+}
+
 function showStatus(message, isError) {
   dom.status.textContent = message;
   dom.status.style.color = isError ? "#a21d1d" : "#6b4d2d";
@@ -142,30 +242,57 @@ function showStatus(message, isError) {
 async function applySettings() {
   const settings = getSettingsFromDom();
   paintValues(settings);
-  await storageSet({ [STORAGE_KEY]: settings });
 
-  const tabs = await tabsQuery({ active: true, currentWindow: true });
-  const activeTab = tabs && tabs[0];
+  await storageSet({
+    [STORAGE_KEY]: settings,
+    [SITE_RULES_KEY]: state.siteRules
+  });
 
-  if (!activeTab || typeof activeTab.id !== "number") {
-    showStatus("No se detecto una pestana activa.", true);
+  if (!state.isSupportedTab || typeof state.activeTabId !== "number") {
+    showStatus("No se detecto una pestana activa compatible.", true);
     return;
   }
 
-  const url = String(activeTab.url || "");
-  if (!url.startsWith("http://") && !url.startsWith("https://")) {
-    showStatus("Esta pagina no permite inyeccion de extensiones.", true);
-    return;
-  }
-
-  await sendMessageToTab(activeTab.id, { type: "A11Y_APPLY", payload: settings });
+  await sendMessageToTab(state.activeTabId, {
+    type: "A11Y_SYNC",
+    payload: {
+      settings,
+      siteMode: state.siteMode
+    }
+  });
   showStatus("Ajustes aplicados.", false);
 }
 
+async function setModeForCurrentSite(mode, successMessage) {
+  if (!state.activeHost || !state.isSupportedTab) {
+    showStatus("Sitio no compatible para control por dominio.", true);
+    return;
+  }
+
+  state.siteMode = mode;
+  state.siteRules = withSiteMode(state.activeHost, mode, state.siteRules);
+  paintSiteState();
+
+  await applySettings();
+  showStatus(successMessage, false);
+}
+
 async function boot() {
-  const result = await storageGet(STORAGE_KEY);
+  const tabs = await tabsQuery({ active: true, currentWindow: true });
+  const activeTab = tabs && tabs[0];
+  const activeUrl = String(activeTab && activeTab.url ? activeTab.url : "");
+
+  state.activeTabId = activeTab && typeof activeTab.id === "number" ? activeTab.id : null;
+  state.activeHost = parseHostnameFromUrl(activeUrl);
+  state.isSupportedTab = activeUrl.startsWith("http://") || activeUrl.startsWith("https://");
+
+  const result = await storageGet([STORAGE_KEY, SITE_RULES_KEY]);
   const settings = sanitizeSettings(result[STORAGE_KEY]);
+  state.siteRules = sanitizeSiteRules(result[SITE_RULES_KEY]);
+  state.siteMode = resolveSiteMode(state.activeHost, state.siteRules);
+
   paintValues(settings);
+  paintSiteState();
 
   const controls = [
     dom.fontScale,
@@ -187,6 +314,31 @@ async function boot() {
   dom.reset.addEventListener("click", () => {
     paintValues(DEFAULT_SETTINGS);
     applySettings().catch(() => showStatus("No se pudo restablecer en esta pagina.", true));
+  });
+
+  dom.siteEnabled.addEventListener("change", () => {
+    const targetMode = dom.siteEnabled.checked ? SITE_MODE_DEFAULT : SITE_MODE_NEVER;
+    setModeForCurrentSite(targetMode, "Preferencia de este sitio actualizada.").catch(() => {
+      showStatus("No se pudo actualizar este sitio.", true);
+    });
+  });
+
+  dom.siteAlways.addEventListener("click", () => {
+    setModeForCurrentSite(SITE_MODE_ALWAYS, "Este dominio ahora siempre aplica accesibilidad.").catch(() => {
+      showStatus("No se pudo guardar regla de siempre.", true);
+    });
+  });
+
+  dom.siteNever.addEventListener("click", () => {
+    setModeForCurrentSite(SITE_MODE_NEVER, "Este dominio ahora nunca aplica accesibilidad.").catch(() => {
+      showStatus("No se pudo guardar regla de nunca.", true);
+    });
+  });
+
+  dom.resetSite.addEventListener("click", () => {
+    setModeForCurrentSite(SITE_MODE_DEFAULT, "Reglas de este dominio restablecidas.").catch(() => {
+      showStatus("No se pudo restablecer este dominio.", true);
+    });
   });
 }
 

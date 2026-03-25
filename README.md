@@ -7,6 +7,7 @@ Extension WebExtension (Manifest V3) para mejorar la legibilidad en sitios web c
 - Interlineado
 - Espaciado de letras
 - Tipografia amigable para dislexia
+- Control por sitio (aplicar, siempre, nunca y restablecer dominio)
 
 Compatible con Chrome, Edge y Firefox (versiones modernas con soporte MV3).
 
@@ -21,6 +22,7 @@ Compatible con Chrome, Edge y Firefox (versiones modernas con soporte MV3).
 
 - Flujo estandar: popup envia mensaje al content script (sin `executeScript` en cada click).
 - Persistencia de ajustes con `storage.local`.
+- Reglas por dominio: aplicar siempre, no aplicar nunca, o volver a configuracion global.
 - Compatibilidad cruzada usando `browser` o `chrome` segun navegador.
 - Controles mas finos para lectura y contraste.
 - Validacion de pestanas no compatibles (`chrome://`, `edge://`, etc.).

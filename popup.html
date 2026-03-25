@@ -54,6 +54,24 @@
             </label>
         </section>
 
+        <section class="site-control" aria-label="Control por sitio">
+            <p class="site-title">Sitio actual</p>
+            <p id="site-host" class="site-host">-</p>
+
+            <label class="toggle" for="site-enabled">
+                <input id="site-enabled" type="checkbox">
+                <span>Aplicar en este sitio</span>
+            </label>
+
+            <div class="site-actions">
+                <button id="site-always" class="secondary" type="button">Aplicar siempre</button>
+                <button id="site-never" class="secondary" type="button">No aplicar nunca</button>
+                <button id="reset-site" class="secondary" type="button">Restablecer este sitio</button>
+            </div>
+
+            <p id="site-mode-label" class="site-mode" aria-live="polite"></p>
+        </section>
+
         <footer class="actions">
             <button id="reset-settings" type="button">Restablecer</button>
             <p id="status" role="status" aria-live="polite"></p>

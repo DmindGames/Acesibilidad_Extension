@@ -71,6 +71,47 @@ input[type="range"] {
   margin: 8px 0 10px;
 }
 
+.site-control {
+  border: 1px solid #e7d0ae;
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  margin-bottom: 10px;
+}
+
+.site-title {
+  margin: 0;
+  font-size: 12px;
+  color: #805b37;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.site-host {
+  margin: 4px 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.site-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.site-actions #reset-site {
+  grid-column: 1 / -1;
+}
+
+.site-mode {
+  margin: 8px 0 0;
+  min-height: 15px;
+  font-size: 12px;
+  color: #6b4d2d;
+}
+
 .toggle {
   display: flex;
   gap: 8px;
@@ -96,6 +137,19 @@ button {
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+}
+
+button.secondary {
+  background: #fff;
+  color: #85531f;
+  border: 1px solid #dcb689;
+  font-size: 12px;
+  padding: 8px;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 button:hover {
