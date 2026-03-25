@@ -1,3 +1,20 @@
-.contrast {
-    filter: invert(100%) contrast(200%);
-  }
+html.a11y-extension {
+  --a11y-font-scale: 1;
+  --a11y-line-height: 1.6;
+  --a11y-letter-spacing: 0px;
+}
+
+html.a11y-extension.a11y-high-contrast {
+  filter: contrast(1.35) saturate(1.15);
+}
+
+html.a11y-extension.a11y-dyslexia,
+html.a11y-extension.a11y-dyslexia :is(p, span, a, li, button, input, textarea, label) {
+  font-family: "Verdana", "Trebuchet MS", Arial, sans-serif !important;
+}
+
+html.a11y-extension :is(p, span, a, li, button, input, textarea, label, h1, h2, h3, h4, h5, h6, small, strong, em, b, i, blockquote) {
+  font-size: calc(1em * var(--a11y-font-scale)) !important;
+  line-height: var(--a11y-line-height) !important;
+  letter-spacing: var(--a11y-letter-spacing) !important;
+}

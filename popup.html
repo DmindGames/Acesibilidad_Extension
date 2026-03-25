@@ -2,40 +2,63 @@
 <html lang="es">
 
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Accesibilidad</title>
+    <link rel="stylesheet" href="popup.css">
     <script defer src="popup.js"></script>
-    <style>
-        .pinky {
-            width: 100px;
-        }
-
-        body {
-            background: white;
-            border-radius: 20px;
-            font-family: cursive;
-        }
-        span{
-            color: #e28e27;
-        }
-
-        button {
-            border-radius: 5px;
-            background: #eca043;
-            color: white;
-            font-size: 16px;
-            padding: 10px;
-            border: solid 1px #e28e27;
-            margin: 5px;
-        }
-    </style>
 </head>
 
 <body>
-    <h2>Pinky asistencia de <span>Accesibilidad</span> </h2>
-    <img class="pinky" src="./PinkyAcces.png" alt="Pinky Accesibilidad">
-    <button id="increase-font">Aumentar Fuente (A+)</button>
-    <button id="decrease-font">Reducir Fuente (a-)</button>
-    <button id="toggle-contrast">Modo Contraste </button>
+    <main class="popup" aria-label="Panel de Accesibilidad Web">
+        <header class="hero">
+            <img class="logo" src="./PinkyAcces.png" alt="Logo de Accesibilidad Web">
+            <div>
+                <h1>Accesibilidad Web</h1>
+                <p>Configura lectura y contraste en la pestaña actual.</p>
+            </div>
+        </header>
+
+        <section class="control">
+            <div class="label-row">
+                <label for="font-scale">Escala de fuente</label>
+                <output id="font-scale-value" for="font-scale">100%</output>
+            </div>
+            <input id="font-scale" type="range" min="80" max="160" step="5" value="100">
+        </section>
+
+        <section class="control">
+            <div class="label-row">
+                <label for="line-height">Interlineado</label>
+                <output id="line-height-value" for="line-height">1.6</output>
+            </div>
+            <input id="line-height" type="range" min="1.2" max="2.2" step="0.1" value="1.6">
+        </section>
+
+        <section class="control">
+            <div class="label-row">
+                <label for="letter-spacing">Espaciado de letras</label>
+                <output id="letter-spacing-value" for="letter-spacing">0 px</output>
+            </div>
+            <input id="letter-spacing" type="range" min="0" max="4" step="0.2" value="0">
+        </section>
+
+        <section class="toggles">
+            <label class="toggle" for="high-contrast">
+                <input id="high-contrast" type="checkbox">
+                <span>Alto contraste</span>
+            </label>
+            <label class="toggle" for="dyslexia-friendly">
+                <input id="dyslexia-friendly" type="checkbox">
+                <span>Fuente amigable para dislexia</span>
+            </label>
+        </section>
+
+        <footer class="actions">
+            <button id="reset-settings" type="button">Restablecer</button>
+            <p id="status" role="status" aria-live="polite"></p>
+        </footer>
+    </main>
 </body>
 
 </html>

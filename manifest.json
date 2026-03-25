@@ -1,25 +1,31 @@
 {
-    "manifest_version": 3,
-    "name": "Accesibilidad Web",
-    "version": "1.0.0",
-    "description": "Mejora la accesibilidad de las páginas web con opciones de contraste, tamaño de fuente y más.",
-    "icons": {
-      "16": "PinkyAcces.png",
-      "48": "PinkyAcces.png",
-      "128": "PinkyAcces.png"
-    },
-    "permissions": ["storage", "activeTab", "scripting"],
-    "host_permissions": ["<all_urls>"],
-    "content_scripts": [
-      {
-        "matches": ["<all_urls>"],
-        "js": ["content.js"],
-        "css": ["styles.css"],
-        "run_at": "document_end"
-      }
-    ],
-    "action": {
-      "default_popup": "popup.html",
-      "default_icon": "PinkyAcces.png"
+  "manifest_version": 3,
+  "name": "Accesibilidad Web",
+  "version": "1.1.0",
+  "description": "Mejora la legibilidad con controles de fuente, contraste, interlineado y espaciado.",
+  "icons": {
+    "16": "PinkyAcces.png",
+    "48": "PinkyAcces.png",
+    "128": "PinkyAcces.png"
+  },
+  "permissions": ["storage", "tabs"],
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Accesibilidad Web",
+    "default_popup": "popup.html",
+    "default_icon": "PinkyAcces.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "accesibilidad-web@dosoft.local",
+      "strict_min_version": "121.0"
     }
   }
+}
