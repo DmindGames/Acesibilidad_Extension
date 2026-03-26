@@ -8,6 +8,15 @@ Extension WebExtension (Manifest V3) para mejorar la legibilidad en sitios web c
 - Espaciado de letras
 - Tipografia amigable para dislexia
 - Control por sitio (aplicar, siempre, nunca y restablecer dominio)
+- Perfiles rapidos (baja vision, dislexia, adulto mayor, daltonismo)
+- Regla de lectura y enfoque de parrafo
+- Ocultar distracciones visuales
+- Lectura en voz del texto seleccionado (TTS)
+- Auditoria rapida de accesibilidad (imagenes sin alt, encabezados, contraste)
+- Exportar e importar configuracion en JSON
+- Resumen inteligente de la pagina (local)
+- Simplificacion inteligente de texto por nivel (leve, media, alta)
+- OCR de imagenes (OCR.Space API) con lectura en voz del texto detectado
 
 Compatible con Chrome, Edge y Firefox (versiones modernas con soporte MV3).
 
@@ -24,9 +33,12 @@ Compatible con Chrome, Edge y Firefox (versiones modernas con soporte MV3).
 - Persistencia de ajustes con `storage.local`.
 - Reglas por dominio: aplicar siempre, no aplicar nunca, o volver a configuracion global.
 - Compatibilidad cruzada usando `browser` o `chrome` segun navegador.
+- Atajos de teclado en pagina (Alt+Shift+1, 2, C, R, F, S).
 - Controles mas finos para lectura y contraste.
 - Validacion de pestanas no compatibles (`chrome://`, `edge://`, etc.).
 - Manifest preparado para Firefox (`browser_specific_settings`).
+- Bloque premium local sin API externa: resumen y simplificacion de contenido visible.
+- Bloque OCR premium con API externa configurable por API key.
 
 ## Prueba local
 

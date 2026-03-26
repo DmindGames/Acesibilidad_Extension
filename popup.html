@@ -21,6 +21,22 @@
 
         <section class="control">
             <div class="label-row">
+                <label for="profile-select">Perfil rapido</label>
+            </div>
+            <div class="row-actions">
+                <select id="profile-select">
+                    <option value="custom">Personalizado</option>
+                    <option value="lowVision">Baja vision</option>
+                    <option value="dyslexia">Dislexia</option>
+                    <option value="senior">Adulto mayor</option>
+                    <option value="colorBlind">Daltonismo</option>
+                </select>
+                <button id="apply-profile" class="secondary" type="button">Aplicar</button>
+            </div>
+        </section>
+
+        <section class="control">
+            <div class="label-row">
                 <label for="font-scale">Escala de fuente</label>
                 <output id="font-scale-value" for="font-scale">100%</output>
             </div>
@@ -52,6 +68,35 @@
                 <input id="dyslexia-friendly" type="checkbox">
                 <span>Fuente amigable para dislexia</span>
             </label>
+            <label class="toggle" for="reading-ruler">
+                <input id="reading-ruler" type="checkbox">
+                <span>Regla de lectura</span>
+            </label>
+            <label class="toggle" for="focus-paragraph">
+                <input id="focus-paragraph" type="checkbox">
+                <span>Enfoque de parrafo</span>
+            </label>
+            <label class="toggle" for="hide-distractions">
+                <input id="hide-distractions" type="checkbox">
+                <span>Ocultar distracciones</span>
+            </label>
+            <label class="toggle" for="keyboard-shortcuts">
+                <input id="keyboard-shortcuts" type="checkbox">
+                <span>Atajos de teclado</span>
+            </label>
+        </section>
+
+        <section class="control">
+            <div class="label-row">
+                <label for="tts-rate">Lectura en voz (TTS)</label>
+                <output id="tts-rate-value" for="tts-rate">1.0x</output>
+            </div>
+            <input id="tts-rate" type="range" min="0.7" max="1.8" step="0.1" value="1.0">
+            <div class="site-actions tts-actions">
+                <button id="tts-read-selection" class="secondary" type="button">Leer seleccion</button>
+                <button id="tts-toggle" class="secondary" type="button">Pausar / Reanudar</button>
+                <button id="tts-stop" class="secondary" type="button">Detener</button>
+            </div>
         </section>
 
         <section class="site-control" aria-label="Control por sitio">
@@ -70,6 +115,62 @@
             </div>
 
             <p id="site-mode-label" class="site-mode" aria-live="polite"></p>
+        </section>
+
+        <section class="control" aria-label="Auditoria basica">
+            <div class="label-row">
+                <span>Auditoria rapida</span>
+            </div>
+            <div class="row-actions">
+                <button id="run-audit" class="secondary" type="button">Analizar pagina</button>
+            </div>
+            <ul id="audit-results" class="audit-results"></ul>
+        </section>
+
+        <section class="control" aria-label="Configuracion">
+            <div class="label-row">
+                <span>Configuracion</span>
+            </div>
+            <div class="site-actions">
+                <button id="export-config" class="secondary" type="button">Exportar JSON</button>
+                <button id="import-config" class="secondary" type="button">Importar JSON</button>
+            </div>
+            <input id="import-file" type="file" accept="application/json" hidden>
+            <p class="hint">Atajos: Alt+Shift+1 subir fuente, Alt+Shift+2 bajar, Alt+Shift+C contraste, Alt+Shift+R regla, Alt+Shift+F enfoque, Alt+Shift+S leer seleccion.</p>
+        </section>
+
+        <section class="control" aria-label="Premium Inteligente">
+            <div class="label-row">
+                <span>Premium: Texto Inteligente</span>
+            </div>
+            <div class="row-actions">
+                <label for="premium-level" class="sr-only">Nivel de simplificacion</label>
+                <select id="premium-level">
+                    <option value="leve">Simplificacion leve</option>
+                    <option value="media">Simplificacion media</option>
+                    <option value="alta">Simplificacion alta</option>
+                </select>
+            </div>
+            <div class="site-actions premium-actions">
+                <button id="premium-summary" class="secondary" type="button">Resumen de pagina</button>
+                <button id="premium-simplify" class="secondary" type="button">Simplificar texto</button>
+                <button id="premium-copy" class="secondary" type="button">Copiar resultado</button>
+            </div>
+            <textarea id="premium-output" class="premium-output" rows="7" readonly placeholder="Aqui veras el resumen o texto simplificado..."></textarea>
+        </section>
+
+        <section class="control" aria-label="Premium OCR">
+            <div class="label-row">
+                <span>Premium: OCR de Imagenes</span>
+            </div>
+            <label for="ocr-api-key" class="hint">API key OCR.Space (usa "helloworld" para pruebas).</label>
+            <input id="ocr-api-key" class="text-input" type="text" placeholder="Ingresa tu API key OCR">
+            <div class="site-actions premium-actions">
+                <button id="ocr-detect" class="secondary" type="button">Detectar texto en imagenes</button>
+                <button id="ocr-read" class="secondary" type="button">Leer OCR</button>
+                <button id="ocr-copy" class="secondary" type="button">Copiar OCR</button>
+            </div>
+            <textarea id="ocr-output" class="premium-output" rows="6" readonly placeholder="Aqui veras el texto detectado en imagenes..."></textarea>
         </section>
 
         <footer class="actions">

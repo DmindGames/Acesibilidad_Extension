@@ -8,6 +8,19 @@ html.a11y-extension.a11y-high-contrast {
   filter: contrast(1.35) saturate(1.15);
 }
 
+html.a11y-extension.a11y-hide-distractions :is(
+  aside,
+  [role="complementary"],
+  [class*="ad-"],
+  [id*="ad-"],
+  [class*="banner"],
+  [id*="banner"],
+  [class*="promo"],
+  [id*="promo"]
+) {
+  display: none !important;
+}
+
 html.a11y-extension.a11y-dyslexia,
 html.a11y-extension.a11y-dyslexia :is(p, span, a, li, button, input, textarea, label) {
   font-family: "Verdana", "Trebuchet MS", Arial, sans-serif !important;
@@ -17,4 +30,34 @@ html.a11y-extension :is(p, span, a, li, button, input, textarea, label, h1, h2, 
   font-size: calc(1em * var(--a11y-font-scale)) !important;
   line-height: var(--a11y-line-height) !important;
   letter-spacing: var(--a11y-letter-spacing) !important;
+}
+
+html.a11y-extension.a11y-focus-mode :is(p, li, article, section, h1, h2, h3, h4, h5, h6) {
+  opacity: 0.62;
+  transition: opacity 100ms ease;
+}
+
+html.a11y-extension.a11y-focus-mode .a11y-focus-target {
+  opacity: 1 !important;
+  outline: 2px solid #f0a44d;
+  outline-offset: 2px;
+  background: rgba(255, 238, 205, 0.5);
+}
+
+.a11y-reading-ruler {
+  position: fixed;
+  left: 0;
+  width: 100vw;
+  height: 34px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 2147483647;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.12),
+    rgba(255, 230, 190, 0.33),
+    rgba(0, 0, 0, 0.12)
+  );
+  border-top: 1px solid rgba(98, 62, 24, 0.35);
+  border-bottom: 1px solid rgba(98, 62, 24, 0.35);
 }

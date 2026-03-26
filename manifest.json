@@ -9,6 +9,7 @@
     "128": "PinkyAcces.png"
   },
   "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://api.ocr.space/*"],
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
