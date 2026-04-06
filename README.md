@@ -7,16 +7,15 @@ Extension WebExtension (Manifest V3) para mejorar la legibilidad en sitios web c
 - Interlineado
 - Espaciado de letras
 - Tipografia amigable para dislexia
-- Control por sitio (aplicar, siempre, nunca y restablecer dominio)
+- Control por sitio con activacion manual por dominio
 - Perfiles rapidos (baja vision, dislexia, adulto mayor, daltonismo)
 - Regla de lectura y enfoque de parrafo
 - Ocultar distracciones visuales
-- Lectura en voz del texto seleccionado (TTS)
-- Auditoria rapida de accesibilidad (imagenes sin alt, encabezados, contraste)
+- Lectura en voz del texto seleccionado o de la pagina completa (TTS)
+- Pregunta opcional por sitio para iniciar lectura automatica
 - Exportar e importar configuracion en JSON
 - Resumen inteligente de la pagina (local)
 - Simplificacion inteligente de texto por nivel (leve, media, alta)
-- OCR de imagenes (OCR.Space API) con lectura en voz del texto detectado
 
 Compatible con Chrome, Edge y Firefox (versiones modernas con soporte MV3).
 
@@ -31,14 +30,14 @@ Compatible con Chrome, Edge y Firefox (versiones modernas con soporte MV3).
 
 - Flujo estandar: popup envia mensaje al content script (sin `executeScript` en cada click).
 - Persistencia de ajustes con `storage.local`.
-- Reglas por dominio: aplicar siempre, no aplicar nunca, o volver a configuracion global.
+- Reglas por dominio: activacion manual y guardado por sitio.
 - Compatibilidad cruzada usando `browser` o `chrome` segun navegador.
 - Atajos de teclado en pagina (Alt+Shift+1, 2, C, R, F, S).
 - Controles mas finos para lectura y contraste.
 - Validacion de pestanas no compatibles (`chrome://`, `edge://`, etc.).
 - Manifest preparado para Firefox (`browser_specific_settings`).
-- Bloque premium local sin API externa: resumen y simplificacion de contenido visible.
-- Bloque OCR premium con API externa configurable por API key.
+- Lectura en voz de pagina completa con confirmacion por sitio o autolectura configurable.
+- Bloque local sin API externa: resumen y simplificacion de contenido visible.
 
 ## Prueba local
 

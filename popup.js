@@ -1,10 +1,15 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 const STORAGE_KEY = "a11ySettings";
 const SITE_RULES_KEY = "a11ySiteRules";
-const OCR_API_KEY_STORAGE = "a11yOcrApiKey";
+const TTS_SITE_RULES_KEY = "a11yTtsSiteRules";
 const SITE_MODE_DEFAULT = "default";
 const SITE_MODE_ALWAYS = "always";
 const SITE_MODE_NEVER = "never";
+const TTS_MODE_ASK = "ask";
+const TTS_MODE_ALWAYS = "always";
+const TTS_MODE_NEVER = "never";
+const DEFAULT_SITE_MODE = SITE_MODE_NEVER;
+const DEFAULT_TTS_MODE = TTS_MODE_ASK;
 const DEFAULT_SETTINGS = {
   fontScale: 1,
   highContrast: false,
@@ -63,16 +68,19 @@ const dom = {
   ttsRate: document.getElementById("tts-rate"),
   ttsRateValue: document.getElementById("tts-rate-value"),
   ttsReadSelection: document.getElementById("tts-read-selection"),
+  ttsReadPage: document.getElementById("tts-read-page"),
   ttsToggle: document.getElementById("tts-toggle"),
   ttsStop: document.getElementById("tts-stop"),
+  ttsAsk: document.getElementById("tts-ask"),
+  ttsAlways: document.getElementById("tts-always"),
+  ttsNever: document.getElementById("tts-never"),
+  ttsSiteLabel: document.getElementById("tts-site-label"),
   siteHost: document.getElementById("site-host"),
   siteEnabled: document.getElementById("site-enabled"),
   siteAlways: document.getElementById("site-always"),
   siteNever: document.getElementById("site-never"),
   resetSite: document.getElementById("reset-site"),
   siteModeLabel: document.getElementById("site-mode-label"),
-  runAudit: document.getElementById("run-audit"),
-  auditResults: document.getElementById("audit-results"),
   exportConfig: document.getElementById("export-config"),
   importConfig: document.getElementById("import-config"),
   importFile: document.getElementById("import-file"),
@@ -81,11 +89,6 @@ const dom = {
   premiumSimplify: document.getElementById("premium-simplify"),
   premiumCopy: document.getElementById("premium-copy"),
   premiumOutput: document.getElementById("premium-output"),
-  ocrApiKey: document.getElementById("ocr-api-key"),
-  ocrDetect: document.getElementById("ocr-detect"),
-  ocrRead: document.getElementById("ocr-read"),
-  ocrCopy: document.getElementById("ocr-copy"),
-  ocrOutput: document.getElementById("ocr-output"),
   reset: document.getElementById("reset-settings"),
   status: document.getElementById("status")
 };
@@ -94,9 +97,10 @@ const state = {
   activeTabId: null,
   activeHost: "",
   siteRules: {},
-  siteMode: SITE_MODE_DEFAULT,
-  isSupportedTab: true,
-  lastOcrText: ""
+  siteMode: DEFAULT_SITE_MODE,
+  ttsSiteRules: {},
+  ttsMode: DEFAULT_TTS_MODE,
+  isSupportedTab: true
 };
 
 function clampNumber(value, min, max, fallback) {
@@ -135,13 +139,27 @@ function sanitizeSiteRules(raw) {
       next[hostname] = mode;
     }
   });
+  return next;
+}
 
+function sanitizeTtsSiteRules(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {};
+  }
+
+  const next = {};
+  Object.keys(raw).forEach((hostname) => {
+    const mode = raw[hostname];
+    if (mode === TTS_MODE_ASK || mode === TTS_MODE_ALWAYS || mode === TTS_MODE_NEVER) {
+      next[hostname] = mode;
+    }
+  });
   return next;
 }
 
 function resolveSiteMode(hostname, rules) {
   if (!hostname) {
-    return SITE_MODE_DEFAULT;
+    return DEFAULT_SITE_MODE;
   }
 
   const mode = rules[hostname];
@@ -149,13 +167,36 @@ function resolveSiteMode(hostname, rules) {
     return mode;
   }
 
-  return SITE_MODE_DEFAULT;
+  return DEFAULT_SITE_MODE;
+}
+
+function resolveTtsMode(hostname, rules) {
+  if (!hostname) {
+    return DEFAULT_TTS_MODE;
+  }
+
+  const mode = rules[hostname];
+  if (mode === TTS_MODE_ASK || mode === TTS_MODE_ALWAYS || mode === TTS_MODE_NEVER) {
+    return mode;
+  }
+
+  return DEFAULT_TTS_MODE;
 }
 
 function withSiteMode(hostname, mode, rules) {
   const next = { ...rules };
-
   if (!hostname || mode === SITE_MODE_DEFAULT) {
+    delete next[hostname];
+    return next;
+  }
+
+  next[hostname] = mode;
+  return next;
+}
+
+function withTtsMode(hostname, mode, rules) {
+  const next = { ...rules };
+  if (!hostname || mode === TTS_MODE_ASK) {
     delete next[hostname];
     return next;
   }
@@ -263,21 +304,6 @@ function paintValues(settings) {
   dom.ttsRateValue.textContent = `${settings.ttsRate.toFixed(1)}x`;
 }
 
-function paintAuditResult(result) {
-  const rows = [
-    `Imagenes sin alt o alt vacio: ${result.imagesWithoutAlt}`,
-    `Saltos no recomendados en encabezados: ${result.headingOrderIssues}`,
-    `Textos con posible contraste bajo: ${result.lowContrastText}`
-  ];
-
-  dom.auditResults.innerHTML = "";
-  rows.forEach((line) => {
-    const item = document.createElement("li");
-    item.textContent = line;
-    dom.auditResults.appendChild(item);
-  });
-}
-
 function paintSiteState() {
   if (!state.isSupportedTab || !state.activeHost) {
     dom.siteHost.textContent = "Sitio no compatible";
@@ -286,7 +312,7 @@ function paintSiteState() {
     dom.siteAlways.disabled = true;
     dom.siteNever.disabled = true;
     dom.resetSite.disabled = true;
-    dom.siteModeLabel.textContent = "Abre un sitio http o https para usar control por dominio.";
+    dom.siteModeLabel.textContent = "Abre una pagina web normal para activar la ayuda aqui.";
     return;
   }
 
@@ -295,48 +321,55 @@ function paintSiteState() {
   dom.siteAlways.disabled = false;
   dom.siteNever.disabled = false;
   dom.resetSite.disabled = false;
-  dom.siteEnabled.checked = state.siteMode !== SITE_MODE_NEVER;
+  dom.siteEnabled.checked = state.siteMode === SITE_MODE_ALWAYS;
 
   if (state.siteMode === SITE_MODE_ALWAYS) {
-    dom.siteModeLabel.textContent = "Estado: siempre aplicar en este dominio.";
+    dom.siteModeLabel.textContent = "La ayuda esta activa en este sitio.";
     return;
   }
 
-  if (state.siteMode === SITE_MODE_NEVER) {
-    dom.siteModeLabel.textContent = "Estado: nunca aplicar en este dominio.";
+  dom.siteModeLabel.textContent = "Este sitio no se toca hasta que tu lo actives.";
+}
+
+function paintTtsState() {
+  const buttons = [
+    [dom.ttsAsk, state.ttsMode === TTS_MODE_ASK],
+    [dom.ttsAlways, state.ttsMode === TTS_MODE_ALWAYS],
+    [dom.ttsNever, state.ttsMode === TTS_MODE_NEVER]
+  ];
+
+  buttons.forEach(([button, active]) => {
+    button.classList.toggle("is-active", active);
+  });
+
+  if (!state.isSupportedTab || !state.activeHost) {
+    dom.ttsSiteLabel.textContent = "La lectura automatica solo funciona en paginas web normales.";
+    dom.ttsAsk.disabled = true;
+    dom.ttsAlways.disabled = true;
+    dom.ttsNever.disabled = true;
     return;
   }
 
-  dom.siteModeLabel.textContent = "Estado: usa la configuracion global de la extension.";
+  dom.ttsAsk.disabled = false;
+  dom.ttsAlways.disabled = false;
+  dom.ttsNever.disabled = false;
+
+  if (state.ttsMode === TTS_MODE_ALWAYS) {
+    dom.ttsSiteLabel.textContent = "Al abrir este sitio, la extension empezara a leer la pagina.";
+    return;
+  }
+
+  if (state.ttsMode === TTS_MODE_NEVER) {
+    dom.ttsSiteLabel.textContent = "En este sitio no se iniciara lectura automatica ni se mostrara aviso.";
+    return;
+  }
+
+  dom.ttsSiteLabel.textContent = "Al abrir este sitio aparecera un aviso para decidir si quieres escuchar la pagina.";
 }
 
 function showStatus(message, isError) {
   dom.status.textContent = message;
   dom.status.style.color = isError ? "#a21d1d" : "#6b4d2d";
-}
-
-async function applySettings() {
-  const settings = getSettingsFromDom();
-  paintValues(settings);
-
-  await storageSet({
-    [STORAGE_KEY]: settings,
-    [SITE_RULES_KEY]: state.siteRules
-  });
-
-  if (!state.isSupportedTab || typeof state.activeTabId !== "number") {
-    showStatus("No se detecto una pestana activa compatible.", true);
-    return;
-  }
-
-  await sendMessageToTab(state.activeTabId, {
-    type: "A11Y_SYNC",
-    payload: {
-      settings,
-      siteMode: state.siteMode
-    }
-  });
-  showStatus("Ajustes aplicados.", false);
 }
 
 function getSettingsFromDom() {
@@ -354,38 +387,78 @@ function getSettingsFromDom() {
   });
 }
 
-async function runAudit() {
+async function syncActiveTab(settingsOverride) {
   if (!state.isSupportedTab || typeof state.activeTabId !== "number") {
-    showStatus("No se puede auditar esta pestana.", true);
+    showStatus("No se detecto una pestana activa compatible.", true);
     return;
   }
 
-  const result = await sendMessageToTab(state.activeTabId, { type: "A11Y_AUDIT" });
-  paintAuditResult(result || { imagesWithoutAlt: 0, headingOrderIssues: 0, lowContrastText: 0 });
-  showStatus("Auditoria completada.", false);
+  const settings = settingsOverride || getSettingsFromDom();
+  await sendMessageToTab(state.activeTabId, {
+    type: "A11Y_SYNC",
+    payload: {
+      settings,
+      siteMode: state.siteMode,
+      ttsMode: state.ttsMode
+    }
+  });
+}
+
+async function applySettings() {
+  const settings = getSettingsFromDom();
+  paintValues(settings);
+
+  await storageSet({
+    [STORAGE_KEY]: settings,
+    [SITE_RULES_KEY]: state.siteRules,
+    [TTS_SITE_RULES_KEY]: state.ttsSiteRules
+  });
+
+  await syncActiveTab(settings);
+  showStatus("Ajustes guardados.", false);
 }
 
 async function sendTtsAction(action) {
   if (!state.isSupportedTab || typeof state.activeTabId !== "number") {
-    showStatus("No se puede usar TTS en esta pestana.", true);
+    showStatus("No se puede usar lectura en voz en esta pestana.", true);
     return;
   }
 
-  const payload = {
-    action,
-    rate: Number(dom.ttsRate.value)
-  };
+  await storageSet({ [STORAGE_KEY]: getSettingsFromDom() });
+  const result = await sendMessageToTab(state.activeTabId, {
+    type: "A11Y_TTS",
+    payload: {
+      action,
+      rate: Number(dom.ttsRate.value)
+    }
+  });
 
-  await sendMessageToTab(state.activeTabId, { type: "A11Y_TTS", payload });
-  showStatus("Comando TTS enviado.", false);
+  if (!result || !result.ok) {
+    const reasons = {
+      unsupported: "Esta pagina no permite lectura en voz en este navegador.",
+      "empty-selection": "Selecciona un texto antes de pedir la lectura.",
+      empty: "No encontre texto suficiente para leer en esta pagina.",
+      "invalid-action": "No se pudo ejecutar la accion de lectura."
+    };
+    showStatus(reasons[result && result.reason ? result.reason : "invalid-action"], true);
+    return;
+  }
+
+  const messages = {
+    "read-selection": "Estoy leyendo la seleccion.",
+    "read-page": "Estoy leyendo la parte principal de la pagina.",
+    "toggle-pause": "La lectura se pauso o reanudo.",
+    stop: "La lectura se detuvo."
+  };
+  showStatus(messages[action] || "Comando de lectura enviado.", false);
 }
 
 async function exportConfig() {
-  const data = await storageGet([STORAGE_KEY, SITE_RULES_KEY, OCR_API_KEY_STORAGE]);
+  const data = await storageGet([STORAGE_KEY, SITE_RULES_KEY, TTS_SITE_RULES_KEY]);
   const blob = new Blob([JSON.stringify({
     settings: sanitizeSettings(data[STORAGE_KEY]),
     siteRules: sanitizeSiteRules(data[SITE_RULES_KEY]),
-    ocrApiKey: String(data[OCR_API_KEY_STORAGE] || "")
+    ttsSiteRules: sanitizeTtsSiteRules(data[TTS_SITE_RULES_KEY])
   }, null, 2)], { type: "application/json" });
 
   const url = URL.createObjectURL(blob);
@@ -394,22 +467,22 @@ async function exportConfig() {
   anchor.download = "accesibilidad-config.json";
   anchor.click();
   URL.revokeObjectURL(url);
-  showStatus("Configuracion exportada.", false);
+  showStatus("Tus ajustes se exportaron correctamente.", false);
 }
 
 function applyProfile(profileName) {
   const preset = PROFILES[profileName];
   if (!preset) {
-    showStatus("Selecciona un perfil valido.", true);
+    showStatus("Elige un perfil valido.", true);
     return;
   }
 
-  const merged = {
+  const merged = sanitizeSettings({
     ...getSettingsFromDom(),
     ...preset
-  };
+  });
 
-  paintValues(sanitizeSettings(merged));
+  paintValues(merged);
   applySettings().catch(() => showStatus("No se pudo aplicar el perfil.", true));
 }
 
@@ -418,138 +491,24 @@ async function importConfigFile(file) {
   const parsed = JSON.parse(text);
   const safeSettings = sanitizeSettings(parsed.settings);
   const safeRules = sanitizeSiteRules(parsed.siteRules);
-  const safeOcrApiKey = String(parsed.ocrApiKey || "").trim();
+  const safeTtsRules = sanitizeTtsSiteRules(parsed.ttsSiteRules);
 
   await storageSet({
     [STORAGE_KEY]: safeSettings,
     [SITE_RULES_KEY]: safeRules,
-    [OCR_API_KEY_STORAGE]: safeOcrApiKey
+    [TTS_SITE_RULES_KEY]: safeTtsRules
   });
 
   state.siteRules = safeRules;
   state.siteMode = resolveSiteMode(state.activeHost, state.siteRules);
-  dom.ocrApiKey.value = safeOcrApiKey;
+  state.ttsSiteRules = safeTtsRules;
+  state.ttsMode = resolveTtsMode(state.activeHost, state.ttsSiteRules);
+
   paintValues(safeSettings);
   paintSiteState();
-  await applySettings();
-  showStatus("Configuracion importada.", false);
-}
-
-function ocrApiKeyValue() {
-  const key = String(dom.ocrApiKey.value || "").trim();
-  return key || "helloworld";
-}
-
-async function collectImageCandidates() {
-  const result = await sendMessageToTab(state.activeTabId, { type: "A11Y_OCR_COLLECT_IMAGES" });
-  const urls = result && Array.isArray(result.urls) ? result.urls : [];
-  return urls.slice(0, 6);
-}
-
-async function runOcrForImageUrl(imageUrl, apiKey) {
-  const formData = new FormData();
-  formData.append("apikey", apiKey);
-  formData.append("language", "spa");
-  formData.append("isOverlayRequired", "false");
-  formData.append("url", imageUrl);
-
-  const response = await fetch("https://api.ocr.space/parse/imageurl", {
-    method: "POST",
-    body: formData
-  });
-
-  if (!response.ok) {
-    throw new Error("ocr-request-failed");
-  }
-
-  const data = await response.json();
-  const parsed = data && Array.isArray(data.ParsedResults) ? data.ParsedResults : [];
-  const text = parsed
-    .map((item) => String(item && item.ParsedText ? item.ParsedText : "").trim())
-    .filter((value) => value.length > 0)
-    .join("\n");
-
-  return text;
-}
-
-async function detectOcrText() {
-  if (!state.isSupportedTab || typeof state.activeTabId !== "number") {
-    showStatus("No se puede ejecutar OCR en esta pestana.", true);
-    return;
-  }
-
-  const apiKey = ocrApiKeyValue();
-  await storageSet({ [OCR_API_KEY_STORAGE]: apiKey });
-
-  const candidates = await collectImageCandidates();
-  if (!candidates.length) {
-    dom.ocrOutput.value = "No se encontraron imagenes visibles compatibles para OCR.";
-    state.lastOcrText = "";
-    showStatus("OCR sin imagenes detectadas.", true);
-    return;
-  }
-
-  const chunks = [];
-  for (let index = 0; index < candidates.length; index += 1) {
-    const url = candidates[index];
-    try {
-      const text = await runOcrForImageUrl(url, apiKey);
-      if (text) {
-        chunks.push(`Imagen ${index + 1}:\n${text}`);
-      }
-    } catch (_error) {
-      // Continue with next candidate image.
-    }
-  }
-
-  if (!chunks.length) {
-    const help = "No se detecto texto. Verifica API key o usa imagenes con texto mas claro.";
-    dom.ocrOutput.value = help;
-    state.lastOcrText = "";
-    showStatus("OCR sin texto detectado.", true);
-    return;
-  }
-
-  const merged = chunks.join("\n\n");
-  state.lastOcrText = merged;
-  dom.ocrOutput.value = merged;
-  showStatus("OCR completado.", false);
-}
-
-async function readOcrText() {
-  const text = String(state.lastOcrText || dom.ocrOutput.value || "").trim();
-  if (!text) {
-    showStatus("No hay texto OCR para leer.", true);
-    return;
-  }
-
-  await sendMessageToTab(state.activeTabId, {
-    type: "A11Y_TTS_CUSTOM",
-    payload: {
-      text,
-      rate: Number(dom.ttsRate.value)
-    }
-  });
-  showStatus("Leyendo texto OCR.", false);
-}
-
-async function copyOcrText() {
-  const text = String(state.lastOcrText || dom.ocrOutput.value || "").trim();
-  if (!text) {
-    showStatus("No hay texto OCR para copiar.", true);
-    return;
-  }
-
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    await navigator.clipboard.writeText(text);
-    showStatus("Texto OCR copiado.", false);
-    return;
-  }
-
-  dom.ocrOutput.focus();
-  dom.ocrOutput.select();
-  document.execCommand("copy");
-  showStatus("Texto OCR copiado.", false);
+  paintTtsState();
+  await syncActiveTab(safeSettings);
+  showStatus("Tus ajustes se importaron correctamente.", false);
 }
 
 function showPremiumOutput(title, content) {
@@ -572,8 +531,8 @@ async function runPremiumSummary() {
     throw new Error("summary-failed");
   }
 
-  showPremiumOutput("Resumen de pagina", result.text || "No se encontro texto suficiente.");
-  showStatus("Resumen generado.", false);
+  showPremiumOutput("Resumen rapido", result.text || "No se encontro texto suficiente.");
+  showStatus("El resumen ya esta listo.", false);
 }
 
 async function runPremiumSimplification() {
@@ -592,27 +551,27 @@ async function runPremiumSimplification() {
     throw new Error("simplify-failed");
   }
 
-  showPremiumOutput("Texto simplificado", result.text || "No se encontro texto suficiente.");
-  showStatus("Texto simplificado generado.", false);
+  showPremiumOutput("Version mas clara", result.text || "No se encontro texto suficiente.");
+  showStatus("La version mas clara ya esta lista.", false);
 }
 
 async function copyPremiumOutput() {
   const text = String(dom.premiumOutput.value || "").trim();
   if (!text) {
-    showStatus("No hay resultado para copiar.", true);
+    showStatus("Todavia no hay texto para copiar.", true);
     return;
   }
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     await navigator.clipboard.writeText(text);
-    showStatus("Resultado copiado al portapapeles.", false);
+    showStatus("El resultado se copio al portapapeles.", false);
     return;
   }
 
   dom.premiumOutput.focus();
   dom.premiumOutput.select();
   document.execCommand("copy");
-  showStatus("Resultado copiado al portapapeles.", false);
+  showStatus("El resultado se copio al portapapeles.", false);
 }
 
 async function setModeForCurrentSite(mode, successMessage) {
@@ -621,11 +580,29 @@ async function setModeForCurrentSite(mode, successMessage) {
     return;
   }
 
-  state.siteMode = mode;
+  state.siteMode = mode === SITE_MODE_DEFAULT ? DEFAULT_SITE_MODE : mode;
   state.siteRules = withSiteMode(state.activeHost, mode, state.siteRules);
   paintSiteState();
-
   await applySettings();
+  showStatus(successMessage, false);
+}
+
+async function setTtsModeForCurrentSite(mode, successMessage) {
+  if (!state.activeHost || !state.isSupportedTab) {
+    showStatus("Sitio no compatible para lectura automatica.", true);
+    return;
+  }
+
+  state.ttsMode = mode;
+  state.ttsSiteRules = withTtsMode(state.activeHost, mode, state.ttsSiteRules);
+  paintTtsState();
+
+  await storageSet({
+    [STORAGE_KEY]: getSettingsFromDom(),
+    [SITE_RULES_KEY]: state.siteRules,
+    [TTS_SITE_RULES_KEY]: state.ttsSiteRules
+  });
+  await syncActiveTab();
   showStatus(successMessage, false);
 }
 
@@ -638,14 +615,16 @@ async function boot() {
   state.activeHost = parseHostnameFromUrl(activeUrl);
   state.isSupportedTab = activeUrl.startsWith("http://") || activeUrl.startsWith("https://");
 
-  const result = await storageGet([STORAGE_KEY, SITE_RULES_KEY, OCR_API_KEY_STORAGE]);
+  const result = await storageGet([STORAGE_KEY, SITE_RULES_KEY, TTS_SITE_RULES_KEY]);
   const settings = sanitizeSettings(result[STORAGE_KEY]);
   state.siteRules = sanitizeSiteRules(result[SITE_RULES_KEY]);
   state.siteMode = resolveSiteMode(state.activeHost, state.siteRules);
-  dom.ocrApiKey.value = String(result[OCR_API_KEY_STORAGE] || "");
+  state.ttsSiteRules = sanitizeTtsSiteRules(result[TTS_SITE_RULES_KEY]);
+  state.ttsMode = resolveTtsMode(state.activeHost, state.ttsSiteRules);
 
   paintValues(settings);
   paintSiteState();
+  paintTtsState();
 
   const controls = [
     dom.fontScale,
@@ -662,39 +641,39 @@ async function boot() {
 
   controls.forEach((control) => {
     control.addEventListener("input", () => {
-      applySettings().catch(() => showStatus("No se pudo aplicar en esta pagina.", true));
+      applySettings().catch(() => showStatus("No pude aplicar los cambios en esta pagina.", true));
     });
     control.addEventListener("change", () => {
-      applySettings().catch(() => showStatus("No se pudo aplicar en esta pagina.", true));
+      applySettings().catch(() => showStatus("No pude aplicar los cambios en esta pagina.", true));
     });
   });
 
   dom.reset.addEventListener("click", () => {
     paintValues(DEFAULT_SETTINGS);
-    applySettings().catch(() => showStatus("No se pudo restablecer en esta pagina.", true));
+    applySettings().catch(() => showStatus("No pude restablecer los ajustes en esta pagina.", true));
   });
 
   dom.siteEnabled.addEventListener("change", () => {
-    const targetMode = dom.siteEnabled.checked ? SITE_MODE_DEFAULT : SITE_MODE_NEVER;
+    const targetMode = dom.siteEnabled.checked ? SITE_MODE_ALWAYS : SITE_MODE_NEVER;
     setModeForCurrentSite(targetMode, "Preferencia de este sitio actualizada.").catch(() => {
       showStatus("No se pudo actualizar este sitio.", true);
     });
   });
 
   dom.siteAlways.addEventListener("click", () => {
-    setModeForCurrentSite(SITE_MODE_ALWAYS, "Este dominio ahora siempre aplica accesibilidad.").catch(() => {
-      showStatus("No se pudo guardar regla de siempre.", true);
+    setModeForCurrentSite(SITE_MODE_ALWAYS, "Este dominio quedo activado para accesibilidad.").catch(() => {
+      showStatus("No se pudo guardar este dominio.", true);
     });
   });
 
   dom.siteNever.addEventListener("click", () => {
-    setModeForCurrentSite(SITE_MODE_NEVER, "Este dominio ahora nunca aplica accesibilidad.").catch(() => {
-      showStatus("No se pudo guardar regla de nunca.", true);
+    setModeForCurrentSite(SITE_MODE_NEVER, "Este dominio quedo desactivado.").catch(() => {
+      showStatus("No se pudo desactivar este dominio.", true);
     });
   });
 
   dom.resetSite.addEventListener("click", () => {
-    setModeForCurrentSite(SITE_MODE_DEFAULT, "Reglas de este dominio restablecidas.").catch(() => {
+    setModeForCurrentSite(SITE_MODE_DEFAULT, "Este dominio volvio al estado inicial.").catch(() => {
       showStatus("No se pudo restablecer este dominio.", true);
     });
   });
@@ -703,20 +682,38 @@ async function boot() {
     applyProfile(dom.profileSelect.value);
   });
 
-  dom.runAudit.addEventListener("click", () => {
-    runAudit().catch(() => showStatus("No se pudo ejecutar auditoria.", true));
+  dom.ttsReadSelection.addEventListener("click", () => {
+    sendTtsAction("read-selection").catch(() => showStatus("No se pudo leer la seleccion.", true));
   });
 
-  dom.ttsReadSelection.addEventListener("click", () => {
-    sendTtsAction("read-selection").catch(() => showStatus("No se pudo leer seleccion.", true));
+  dom.ttsReadPage.addEventListener("click", () => {
+    sendTtsAction("read-page").catch(() => showStatus("No se pudo leer la pagina.", true));
   });
 
   dom.ttsToggle.addEventListener("click", () => {
-    sendTtsAction("toggle-pause").catch(() => showStatus("No se pudo pausar/reanudar.", true));
+    sendTtsAction("toggle-pause").catch(() => showStatus("No se pudo pausar o reanudar.", true));
   });
 
   dom.ttsStop.addEventListener("click", () => {
-    sendTtsAction("stop").catch(() => showStatus("No se pudo detener TTS.", true));
+    sendTtsAction("stop").catch(() => showStatus("No se pudo detener la lectura.", true));
+  });
+
+  dom.ttsAsk.addEventListener("click", () => {
+    setTtsModeForCurrentSite(TTS_MODE_ASK, "Este sitio preguntara antes de leer automaticamente.").catch(() => {
+      showStatus("No se pudo actualizar la lectura automatica.", true);
+    });
+  });
+
+  dom.ttsAlways.addEventListener("click", () => {
+    setTtsModeForCurrentSite(TTS_MODE_ALWAYS, "Este sitio leera automaticamente la pagina al abrirse.").catch(() => {
+      showStatus("No se pudo actualizar la lectura automatica.", true);
+    });
+  });
+
+  dom.ttsNever.addEventListener("click", () => {
+    setTtsModeForCurrentSite(TTS_MODE_NEVER, "Este sitio no iniciara lectura automatica.").catch(() => {
+      showStatus("No se pudo actualizar la lectura automatica.", true);
+    });
   });
 
   dom.exportConfig.addEventListener("click", () => {
@@ -749,23 +746,6 @@ async function boot() {
 
   dom.premiumCopy.addEventListener("click", () => {
     copyPremiumOutput().catch(() => showStatus("No se pudo copiar el resultado.", true));
-  });
-
-  dom.ocrApiKey.addEventListener("change", () => {
-    storageSet({ [OCR_API_KEY_STORAGE]: String(dom.ocrApiKey.value || "").trim() })
-      .catch(() => undefined);
-  });
-
-  dom.ocrDetect.addEventListener("click", () => {
-    detectOcrText().catch(() => showStatus("No se pudo completar OCR.", true));
-  });
-
-  dom.ocrRead.addEventListener("click", () => {
-    readOcrText().catch(() => showStatus("No se pudo leer el OCR.", true));
-  });
-
-  dom.ocrCopy.addEventListener("click", () => {
-    copyOcrText().catch(() => showStatus("No se pudo copiar OCR.", true));
   });
 }
 

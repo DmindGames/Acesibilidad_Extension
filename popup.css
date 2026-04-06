@@ -45,6 +45,13 @@ h1 {
   color: #7a5330;
 }
 
+.section-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #7a5330;
+  line-height: 1.35;
+}
+
 .control {
   border: 1px solid #e7d0ae;
   border-radius: 10px;
@@ -121,8 +128,8 @@ input[type="range"] {
   grid-template-columns: 1fr 1fr;
 }
 
-.tts-actions #tts-stop {
-  grid-column: 1 / -1;
+.tts-preference-actions {
+  grid-template-columns: 1fr;
 }
 
 .premium-actions {
@@ -146,16 +153,6 @@ input[type="range"] {
   resize: vertical;
 }
 
-.text-input {
-  width: 100%;
-  border-radius: 8px;
-  border: 1px solid #dcb689;
-  padding: 8px;
-  font-size: 12px;
-  color: #5a4028;
-  background: #fff;
-}
-
 .site-actions #reset-site {
   grid-column: 1 / -1;
 }
@@ -165,17 +162,6 @@ input[type="range"] {
   min-height: 15px;
   font-size: 12px;
   color: #6b4d2d;
-}
-
-.audit-results {
-  margin: 8px 0 0;
-  padding-left: 16px;
-  font-size: 12px;
-  color: #5a4028;
-}
-
-.audit-results li {
-  margin-bottom: 4px;
 }
 
 .hint {
@@ -229,6 +215,12 @@ button.secondary {
   border: 1px solid #dcb689;
   font-size: 12px;
   padding: 8px;
+}
+
+button.secondary.is-active {
+  background: linear-gradient(90deg, #dd8a29, #f1ac59);
+  color: #fff;
+  border-color: #d98a31;
 }
 
 #apply-profile {

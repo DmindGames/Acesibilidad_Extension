@@ -2,9 +2,15 @@
   const api = typeof browser !== "undefined" ? browser : chrome;
   const STORAGE_KEY = "a11ySettings";
   const SITE_RULES_KEY = "a11ySiteRules";
+  const TTS_SITE_RULES_KEY = "a11yTtsSiteRules";
   const SITE_MODE_DEFAULT = "default";
   const SITE_MODE_ALWAYS = "always";
   const SITE_MODE_NEVER = "never";
+  const TTS_MODE_ASK = "ask";
+  const TTS_MODE_ALWAYS = "always";
+  const TTS_MODE_NEVER = "never";
+  const DEFAULT_SITE_MODE = SITE_MODE_NEVER;
+  const DEFAULT_TTS_MODE = TTS_MODE_ASK;
   const DEFAULT_SETTINGS = {
     fontScale: 1,
     highContrast: false,
@@ -29,11 +35,17 @@
 
   const state = {
     settings: DEFAULT_SETTINGS,
-    siteMode: SITE_MODE_DEFAULT,
+    siteMode: DEFAULT_SITE_MODE,
+    ttsMode: DEFAULT_TTS_MODE,
+    ttsPromptEl: null,
+    ttsPromptFocusBack: null,
     rulerEl: null,
     focusTarget: null,
     focusBound: false,
-    shortcutsBound: false
+    shortcutsBound: false,
+    speechQueue: [],
+    speechActive: false,
+    ttsPromptShown: false
   };
 
   function sanitizeSettings(raw) {
@@ -105,6 +117,9 @@
     root.style.removeProperty("--a11y-letter-spacing");
     removeRuler();
     unbindFocusMode();
+    unbindShortcuts();
+    hideTtsPrompt();
+    stopSpeech();
   }
 
   function sanitizeSiteRules(raw) {
@@ -127,7 +142,30 @@
     if (value === SITE_MODE_ALWAYS || value === SITE_MODE_NEVER) {
       return value;
     }
-    return SITE_MODE_DEFAULT;
+    return DEFAULT_SITE_MODE;
+  }
+
+  function sanitizeTtsSiteRules(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return {};
+    }
+
+    const next = {};
+    Object.keys(raw).forEach((hostname) => {
+      const mode = raw[hostname];
+      if (mode === TTS_MODE_ASK || mode === TTS_MODE_ALWAYS || mode === TTS_MODE_NEVER) {
+        next[hostname] = mode;
+      }
+    });
+
+    return next;
+  }
+
+  function sanitizeTtsMode(value) {
+    if (value === TTS_MODE_ASK || value === TTS_MODE_ALWAYS || value === TTS_MODE_NEVER) {
+      return value;
+    }
+    return DEFAULT_TTS_MODE;
   }
 
   function ensureRuler() {
@@ -249,14 +287,237 @@
 
   function speakSelection(rate) {
     const text = String(window.getSelection ? window.getSelection().toString() : "").trim();
-    if (!text || typeof window.speechSynthesis === "undefined") {
+    if (!text) {
+      return false;
+    }
+    return speakText(text, rate);
+  }
+
+  function splitSpeechText(text) {
+    const source = String(text || "").trim();
+    if (!source) {
+      return [];
+    }
+
+    const sentences = source
+      .split(/(?<=[.!?])\s+/)
+      .map((part) => normalizeWhitespace(part))
+      .filter((part) => part.length > 0);
+
+    const chunks = [];
+    let current = "";
+
+    sentences.forEach((sentence) => {
+      const next = current ? `${current} ${sentence}` : sentence;
+      if (next.length > 220 && current) {
+        chunks.push(current);
+        current = sentence;
+      } else {
+        current = next;
+      }
+    });
+
+    if (current) {
+      chunks.push(current);
+    }
+
+    return chunks.length ? chunks : [source];
+  }
+
+  function speakNextChunk(rate) {
+    if (typeof window.speechSynthesis === "undefined") {
+      state.speechQueue = [];
+      state.speechActive = false;
       return;
     }
 
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = clampNumber(rate, 0.7, 1.8, 1);
+    const nextChunk = state.speechQueue.shift();
+    if (!nextChunk) {
+      state.speechActive = false;
+      return;
+    }
+
+    state.speechActive = true;
+    const utterance = new SpeechSynthesisUtterance(nextChunk);
+    utterance.rate = clampNumber(rate, 0.7, 1.8, state.settings.ttsRate);
+    utterance.onend = () => {
+      speakNextChunk(rate);
+    };
+    utterance.onerror = () => {
+      state.speechQueue = [];
+      state.speechActive = false;
+    };
     window.speechSynthesis.speak(utterance);
+  }
+
+  function stopSpeech() {
+    state.speechQueue = [];
+    state.speechActive = false;
+    if (typeof window.speechSynthesis !== "undefined") {
+      window.speechSynthesis.cancel();
+    }
+  }
+
+  function storageSetLocal(data) {
+    return new Promise((resolve) => {
+      const request = api.storage.local.set(data);
+      if (request && typeof request.then === "function") {
+        request.then(resolve).catch(resolve);
+        return;
+      }
+
+      api.storage.local.set(data, () => resolve());
+    });
+  }
+
+  function storageGetLocal(keys) {
+    return new Promise((resolve) => {
+      const request = api.storage.local.get(keys);
+      if (request && typeof request.then === "function") {
+        request.then(resolve).catch(() => resolve({}));
+        return;
+      }
+
+      api.storage.local.get(keys, (result) => resolve(result || {}));
+    });
+  }
+
+  function ensureTtsPrompt() {
+    if (state.ttsPromptEl) {
+      return state.ttsPromptEl;
+    }
+
+    const prompt = document.createElement("section");
+    prompt.className = "a11y-tts-prompt";
+    prompt.setAttribute("hidden", "hidden");
+    prompt.innerHTML = `
+      <div class="a11y-tts-prompt__backdrop" data-a11y-tts-action="dismiss"></div>
+      <div class="a11y-tts-prompt__card" role="dialog" aria-modal="true" aria-labelledby="a11y-tts-title" aria-describedby="a11y-tts-description">
+        <p class="a11y-tts-prompt__eyebrow">Lectura en voz disponible</p>
+        <h2 id="a11y-tts-title" class="a11y-tts-prompt__title">Quieres que esta pagina se lea en voz alta?</h2>
+        <p id="a11y-tts-description" class="a11y-tts-prompt__description">Puedes escuchar el contenido principal ahora, dejarlo siempre activo en este sitio o cerrar este aviso.</p>
+        <div class="a11y-tts-prompt__actions">
+          <button type="button" class="a11y-tts-prompt__button a11y-tts-prompt__button--primary" data-a11y-tts-action="read-now">Leer ahora</button>
+          <button type="button" class="a11y-tts-prompt__button" data-a11y-tts-action="always">Leer siempre aqui</button>
+          <button type="button" class="a11y-tts-prompt__button" data-a11y-tts-action="dismiss">Ahora no</button>
+          <button type="button" class="a11y-tts-prompt__button" data-a11y-tts-action="never">No volver a mostrar</button>
+        </div>
+      </div>
+    `;
+
+    prompt.addEventListener("click", (event) => {
+      const trigger = event.target && event.target.closest
+        ? event.target.closest("[data-a11y-tts-action]")
+        : null;
+
+      if (!trigger) {
+        return;
+      }
+
+      handleTtsPromptAction(String(trigger.getAttribute("data-a11y-tts-action") || ""));
+    });
+
+    prompt.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        hideTtsPrompt();
+      }
+    });
+
+    (document.body || document.documentElement).appendChild(prompt);
+    state.ttsPromptEl = prompt;
+    return prompt;
+  }
+
+  function showTtsPrompt() {
+    const prompt = ensureTtsPrompt();
+    state.ttsPromptFocusBack = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    prompt.removeAttribute("hidden");
+
+    const primary = prompt.querySelector("[data-a11y-tts-action='read-now']");
+    if (primary && typeof primary.focus === "function") {
+      primary.focus();
+    }
+  }
+
+  function hideTtsPrompt() {
+    if (!state.ttsPromptEl) {
+      return;
+    }
+
+    state.ttsPromptEl.setAttribute("hidden", "hidden");
+    if (state.ttsPromptFocusBack && typeof state.ttsPromptFocusBack.focus === "function") {
+      state.ttsPromptFocusBack.focus();
+    }
+    state.ttsPromptFocusBack = null;
+  }
+
+  async function persistTtsModeForCurrentSite(mode) {
+    const hostname = String(window.location.hostname || "");
+    state.ttsMode = mode;
+    if (!hostname) {
+      return;
+    }
+
+    const result = await storageGetLocal([TTS_SITE_RULES_KEY]);
+    const rules = sanitizeTtsSiteRules(result[TTS_SITE_RULES_KEY]);
+
+    if (mode === TTS_MODE_ASK) {
+      delete rules[hostname];
+    } else {
+      rules[hostname] = mode;
+    }
+
+    await storageSetLocal({ [TTS_SITE_RULES_KEY]: rules });
+  }
+
+  async function handleTtsPromptAction(action) {
+    if (action === "read-now") {
+      hideTtsPrompt();
+      speakPage(state.settings.ttsRate);
+      return;
+    }
+
+    if (action === "always") {
+      await persistTtsModeForCurrentSite(TTS_MODE_ALWAYS);
+      hideTtsPrompt();
+      speakPage(state.settings.ttsRate);
+      return;
+    }
+
+    if (action === "never") {
+      await persistTtsModeForCurrentSite(TTS_MODE_NEVER);
+      hideTtsPrompt();
+      return;
+    }
+
+    hideTtsPrompt();
+  }
+
+  function speakText(text, rate) {
+    if (typeof window.speechSynthesis === "undefined") {
+      return false;
+    }
+
+    const normalized = normalizeWhitespace(text);
+    if (!normalized) {
+      return false;
+    }
+
+    stopSpeech();
+    state.speechQueue = splitSpeechText(normalized);
+    speakNextChunk(rate);
+    return true;
+  }
+
+  function speakPage(rate) {
+    const text = extractReadableText();
+    if (!text) {
+      return { ok: false, reason: "empty" };
+    }
+
+    const spoken = speakText(text, rate);
+    return spoken ? { ok: true } : { ok: false, reason: "unsupported" };
   }
 
   function handleTts(payload) {
@@ -269,8 +530,11 @@
     state.settings.ttsRate = rate;
 
     if (action === "read-selection") {
-      speakSelection(rate);
-      return { ok: true };
+      return speakSelection(rate) ? { ok: true } : { ok: false, reason: "empty-selection" };
+    }
+
+    if (action === "read-page") {
+      return speakPage(rate);
     }
 
     if (action === "toggle-pause") {
@@ -283,7 +547,7 @@
     }
 
     if (action === "stop") {
-      window.speechSynthesis.cancel();
+      stopSpeech();
       return { ok: true };
     }
 
@@ -291,10 +555,6 @@
   }
 
   function speakCustomText(payload) {
-    if (typeof window.speechSynthesis === "undefined") {
-      return { ok: false, reason: "unsupported" };
-    }
-
     const text = normalizeWhitespace(payload && payload.text ? payload.text : "");
     if (!text) {
       return { ok: false, reason: "empty" };
@@ -302,47 +562,7 @@
 
     const rate = clampNumber(payload && payload.rate, 0.7, 1.8, state.settings.ttsRate);
     state.settings.ttsRate = rate;
-
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = rate;
-    window.speechSynthesis.speak(utterance);
-    return { ok: true };
-  }
-
-  function collectOcrImageUrls() {
-    const urls = [];
-    const seen = new Set();
-    const nodes = Array.from(document.querySelectorAll("img[src]"));
-
-    for (let index = 0; index < nodes.length; index += 1) {
-      const node = nodes[index];
-      if (!isVisible(node)) {
-        continue;
-      }
-
-      const src = String(node.currentSrc || node.src || "").trim();
-      if (!src.startsWith("http://") && !src.startsWith("https://")) {
-        continue;
-      }
-
-      const width = Number(node.naturalWidth || node.width || 0);
-      const height = Number(node.naturalHeight || node.height || 0);
-      if (width < 120 || height < 50) {
-        continue;
-      }
-
-      if (!seen.has(src)) {
-        seen.add(src);
-        urls.push(src);
-      }
-
-      if (urls.length >= 10) {
-        break;
-      }
-    }
-
-    return urls;
+    return speakText(text, rate) ? { ok: true } : { ok: false, reason: "unsupported" };
   }
 
   function saveCurrentState() {
@@ -353,110 +573,6 @@
       return;
     }
     api.storage.local.set(payload, () => undefined);
-  }
-
-  function runAudit() {
-    return {
-      imagesWithoutAlt: countImagesWithoutAlt(),
-      headingOrderIssues: countHeadingOrderIssues(),
-      lowContrastText: countLowContrastText()
-    };
-  }
-
-  function countImagesWithoutAlt() {
-    const images = document.querySelectorAll("img");
-    let issues = 0;
-    images.forEach((img) => {
-      const alt = img.getAttribute("alt");
-      if (alt === null || alt.trim() === "") {
-        issues += 1;
-      }
-    });
-    return issues;
-  }
-
-  function countHeadingOrderIssues() {
-    const headings = document.querySelectorAll("h1, h2, h3, h4, h5, h6");
-    let lastLevel = 0;
-    let issues = 0;
-
-    headings.forEach((heading) => {
-      const level = Number(heading.tagName.substring(1));
-      if (lastLevel > 0 && level - lastLevel > 1) {
-        issues += 1;
-      }
-      lastLevel = level;
-    });
-
-    return issues;
-  }
-
-  function countLowContrastText() {
-    const nodes = document.querySelectorAll("p, span, a, li, button, label, h1, h2, h3, h4, h5, h6");
-    let issues = 0;
-    const sample = Array.from(nodes).slice(0, 250);
-
-    sample.forEach((node) => {
-      const style = window.getComputedStyle(node);
-      const fg = parseRgb(style.color);
-      const bg = resolveBackgroundColor(node);
-      if (!fg || !bg) {
-        return;
-      }
-
-      const ratio = contrastRatio(fg, bg);
-      if (ratio < 4.5) {
-        issues += 1;
-      }
-    });
-
-    return issues;
-  }
-
-  function resolveBackgroundColor(node) {
-    let current = node;
-    while (current && current !== document.documentElement) {
-      const color = parseRgb(window.getComputedStyle(current).backgroundColor);
-      if (color && color.alpha > 0) {
-        return color;
-      }
-      current = current.parentElement;
-    }
-    return { r: 255, g: 255, b: 255, alpha: 1 };
-  }
-
-  function parseRgb(value) {
-    const input = String(value || "").trim();
-    const match = input.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/i);
-    if (!match) {
-      return null;
-    }
-    return {
-      r: Number(match[1]),
-      g: Number(match[2]),
-      b: Number(match[3]),
-      alpha: match[4] === undefined ? 1 : Number(match[4])
-    };
-  }
-
-  function relativeLuminance(color) {
-    const channels = [color.r, color.g, color.b].map((channel) => {
-      const normalized = channel / 255;
-      if (normalized <= 0.03928) {
-        return normalized / 12.92;
-      }
-      return Math.pow((normalized + 0.055) / 1.055, 2.4);
-    });
-
-    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
-  }
-
-  function contrastRatio(fg, bg) {
-    const l1 = relativeLuminance(fg);
-    const l2 = relativeLuminance(bg);
-    const max = Math.max(l1, l2);
-    const min = Math.min(l1, l2);
-    return (max + 0.05) / (min + 0.05);
   }
 
   function extractReadableText() {
@@ -685,12 +801,65 @@
 
   function modeForCurrentSite(rules) {
     const hostname = String(window.location.hostname || "");
-    return sanitizeSiteMode(rules[hostname]);
+    const mode = rules[hostname];
+    if (mode === SITE_MODE_ALWAYS || mode === SITE_MODE_NEVER) {
+      return mode;
+    }
+    return DEFAULT_SITE_MODE;
   }
 
-  function applyMode(settings, siteMode) {
+  function ttsModeForCurrentSite(rules) {
+    const hostname = String(window.location.hostname || "");
+    const mode = rules[hostname];
+    if (mode === TTS_MODE_ASK || mode === TTS_MODE_ALWAYS || mode === TTS_MODE_NEVER) {
+      return mode;
+    }
+    return DEFAULT_TTS_MODE;
+  }
+
+  function scheduleTtsPrompt() {
+    if (state.ttsPromptShown || state.siteMode === SITE_MODE_NEVER || typeof window.speechSynthesis === "undefined") {
+      return;
+    }
+
+    const run = () => {
+      if (state.ttsPromptShown || state.siteMode === SITE_MODE_NEVER) {
+        return;
+      }
+
+      state.ttsPromptShown = true;
+      if (state.ttsMode === TTS_MODE_ALWAYS) {
+        speakPage(state.settings.ttsRate);
+        return;
+      }
+
+      if (state.ttsMode === TTS_MODE_ASK) {
+        showTtsPrompt();
+      }
+    };
+
+    if (document.visibilityState === "visible") {
+      window.setTimeout(run, 900);
+      return;
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      document.removeEventListener("visibilitychange", onVisible);
+      window.setTimeout(run, 400);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+  }
+
+  function applyMode(settings, siteMode, ttsMode, shouldSchedulePrompt) {
     state.settings = settings;
     state.siteMode = siteMode;
+    state.ttsMode = ttsMode;
+    if (shouldSchedulePrompt) {
+      state.ttsPromptShown = false;
+    }
 
     if (siteMode === SITE_MODE_NEVER) {
       clearSettings();
@@ -698,40 +867,46 @@
     }
 
     applySettings(settings);
+    if (shouldSchedulePrompt && ttsMode !== TTS_MODE_NEVER) {
+      scheduleTtsPrompt();
+    }
   }
 
   function getStorageSettings() {
     return new Promise((resolve) => {
-      const request = api.storage.local.get([STORAGE_KEY, SITE_RULES_KEY]);
+      const request = api.storage.local.get([STORAGE_KEY, SITE_RULES_KEY, TTS_SITE_RULES_KEY]);
       if (request && typeof request.then === "function") {
         request
           .then((result) => {
             resolve({
               settings: sanitizeSettings(result[STORAGE_KEY]),
-              siteMode: modeForCurrentSite(sanitizeSiteRules(result[SITE_RULES_KEY]))
+              siteMode: modeForCurrentSite(sanitizeSiteRules(result[SITE_RULES_KEY])),
+              ttsMode: ttsModeForCurrentSite(sanitizeTtsSiteRules(result[TTS_SITE_RULES_KEY]))
             });
           })
           .catch(() => {
             resolve({
               settings: DEFAULT_SETTINGS,
-              siteMode: SITE_MODE_DEFAULT
+              siteMode: DEFAULT_SITE_MODE,
+              ttsMode: DEFAULT_TTS_MODE
             });
           });
         return;
       }
 
-      api.storage.local.get([STORAGE_KEY, SITE_RULES_KEY], (result) => {
+      api.storage.local.get([STORAGE_KEY, SITE_RULES_KEY, TTS_SITE_RULES_KEY], (result) => {
         resolve({
           settings: sanitizeSettings(result ? result[STORAGE_KEY] : undefined),
-          siteMode: modeForCurrentSite(sanitizeSiteRules(result ? result[SITE_RULES_KEY] : undefined))
+          siteMode: modeForCurrentSite(sanitizeSiteRules(result ? result[SITE_RULES_KEY] : undefined)),
+          ttsMode: ttsModeForCurrentSite(sanitizeTtsSiteRules(result ? result[TTS_SITE_RULES_KEY] : undefined))
         });
       });
     });
   }
 
   function initialize() {
-    getStorageSettings().then(({ settings, siteMode }) => {
-      applyMode(settings, siteMode);
+    getStorageSettings().then(({ settings, siteMode, ttsMode }) => {
+      applyMode(settings, siteMode, ttsMode, true);
     });
 
     api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -742,23 +917,14 @@
       if (message.type === "A11Y_SYNC") {
         const safeSettings = sanitizeSettings(message.payload ? message.payload.settings : undefined);
         const safeMode = sanitizeSiteMode(message.payload ? message.payload.siteMode : undefined);
-        applyMode(safeSettings, safeMode);
+        const safeTtsMode = sanitizeTtsMode(message.payload ? message.payload.ttsMode : undefined);
+        applyMode(safeSettings, safeMode, safeTtsMode, safeTtsMode === TTS_MODE_ALWAYS);
         sendResponse({ ok: true });
         return false;
       }
 
       if (message.type === "A11Y_TTS") {
         sendResponse(handleTts(message.payload || {}));
-        return false;
-      }
-
-      if (message.type === "A11Y_AUDIT") {
-        sendResponse(runAudit());
-        return false;
-      }
-
-      if (message.type === "A11Y_OCR_COLLECT_IMAGES") {
-        sendResponse({ ok: true, urls: collectOcrImageUrls() });
         return false;
       }
 
@@ -781,7 +947,7 @@
 
       if (message.type === "A11Y_APPLY") {
         const safeSettings = sanitizeSettings(message.payload);
-        applyMode(safeSettings, SITE_MODE_DEFAULT);
+        applyMode(safeSettings, DEFAULT_SITE_MODE, state.ttsMode, false);
         sendResponse({ ok: true });
         return false;
       }

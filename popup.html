@@ -15,9 +15,27 @@
             <img class="logo" src="./PinkyAcces.png" alt="Logo de Accesibilidad Web">
             <div>
                 <h1>Accesibilidad Web</h1>
-                <p>Configura lectura y contraste en la pestaña actual.</p>
+                <p>Activa solo la ayuda que te haga falta en cada sitio.</p>
             </div>
         </header>
+
+        <section class="site-control" aria-label="Control por sitio">
+            <p class="site-title">Este sitio</p>
+            <p id="site-host" class="site-host">-</p>
+
+            <label class="toggle" for="site-enabled">
+                <input id="site-enabled" type="checkbox">
+                <span>Usar accesibilidad aqui</span>
+            </label>
+
+            <div class="site-actions">
+                <button id="site-always" class="secondary" type="button">Usar siempre aqui</button>
+                <button id="site-never" class="secondary" type="button">No usar aqui</button>
+                <button id="reset-site" class="secondary" type="button">Volver al estado inicial</button>
+            </div>
+
+            <p id="site-mode-label" class="site-mode" aria-live="polite"></p>
+        </section>
 
         <section class="control">
             <div class="label-row">
@@ -86,91 +104,59 @@
             </label>
         </section>
 
-        <section class="control">
+        <section class="control" aria-label="Lectura en voz">
             <div class="label-row">
-                <label for="tts-rate">Lectura en voz (TTS)</label>
+                <label for="tts-rate">Lectura en voz</label>
                 <output id="tts-rate-value" for="tts-rate">1.0x</output>
             </div>
+            <p class="section-note">Puedes escuchar una seleccion o la parte principal de la pagina. Si quieres, este sitio puede preguntarte al abrirse.</p>
             <input id="tts-rate" type="range" min="0.7" max="1.8" step="0.1" value="1.0">
             <div class="site-actions tts-actions">
                 <button id="tts-read-selection" class="secondary" type="button">Leer seleccion</button>
+                <button id="tts-read-page" class="secondary" type="button">Leer pagina</button>
                 <button id="tts-toggle" class="secondary" type="button">Pausar / Reanudar</button>
                 <button id="tts-stop" class="secondary" type="button">Detener</button>
             </div>
-        </section>
-
-        <section class="site-control" aria-label="Control por sitio">
-            <p class="site-title">Sitio actual</p>
-            <p id="site-host" class="site-host">-</p>
-
-            <label class="toggle" for="site-enabled">
-                <input id="site-enabled" type="checkbox">
-                <span>Aplicar en este sitio</span>
-            </label>
-
-            <div class="site-actions">
-                <button id="site-always" class="secondary" type="button">Aplicar siempre</button>
-                <button id="site-never" class="secondary" type="button">No aplicar nunca</button>
-                <button id="reset-site" class="secondary" type="button">Restablecer este sitio</button>
+            <div class="site-actions tts-preference-actions">
+                <button id="tts-ask" class="secondary" type="button">Preguntar al abrir</button>
+                <button id="tts-always" class="secondary" type="button">Leer siempre aqui</button>
+                <button id="tts-never" class="secondary" type="button">No leer automaticamente</button>
             </div>
-
-            <p id="site-mode-label" class="site-mode" aria-live="polite"></p>
+            <p id="tts-site-label" class="site-mode" aria-live="polite"></p>
         </section>
 
-        <section class="control" aria-label="Auditoria basica">
+        <section class="control" aria-label="Texto claro">
             <div class="label-row">
-                <span>Auditoria rapida</span>
+                <span>Texto claro</span>
             </div>
+            <p class="section-note">Te ayuda a resumir o aclarar el contenido visible de esta pagina. Se procesa de forma local en la extension.</p>
             <div class="row-actions">
-                <button id="run-audit" class="secondary" type="button">Analizar pagina</button>
+                <label for="premium-level" class="sr-only">Nivel de ayuda</label>
+                <select id="premium-level">
+                    <option value="leve">Ayuda suave</option>
+                    <option value="media">Ayuda equilibrada</option>
+                    <option value="alta">Mas simple</option>
+                </select>
             </div>
-            <ul id="audit-results" class="audit-results"></ul>
+            <div class="site-actions premium-actions">
+                <button id="premium-summary" class="secondary" type="button">Hacer resumen</button>
+                <button id="premium-simplify" class="secondary" type="button">Hacerlo mas claro</button>
+                <button id="premium-copy" class="secondary" type="button">Copiar resultado</button>
+            </div>
+            <textarea id="premium-output" class="premium-output" rows="7" readonly placeholder="Aqui veras el resumen o la version mas clara del texto..."></textarea>
         </section>
 
         <section class="control" aria-label="Configuracion">
             <div class="label-row">
                 <span>Configuracion</span>
             </div>
+            <p class="section-note">Guarda tus ajustes en un archivo JSON para llevarlos a otro navegador o recuperarlos despues. Tambien incluye preferencias por sitio.</p>
             <div class="site-actions">
                 <button id="export-config" class="secondary" type="button">Exportar JSON</button>
                 <button id="import-config" class="secondary" type="button">Importar JSON</button>
             </div>
             <input id="import-file" type="file" accept="application/json" hidden>
             <p class="hint">Atajos: Alt+Shift+1 subir fuente, Alt+Shift+2 bajar, Alt+Shift+C contraste, Alt+Shift+R regla, Alt+Shift+F enfoque, Alt+Shift+S leer seleccion.</p>
-        </section>
-
-        <section class="control" aria-label="Premium Inteligente">
-            <div class="label-row">
-                <span>Premium: Texto Inteligente</span>
-            </div>
-            <div class="row-actions">
-                <label for="premium-level" class="sr-only">Nivel de simplificacion</label>
-                <select id="premium-level">
-                    <option value="leve">Simplificacion leve</option>
-                    <option value="media">Simplificacion media</option>
-                    <option value="alta">Simplificacion alta</option>
-                </select>
-            </div>
-            <div class="site-actions premium-actions">
-                <button id="premium-summary" class="secondary" type="button">Resumen de pagina</button>
-                <button id="premium-simplify" class="secondary" type="button">Simplificar texto</button>
-                <button id="premium-copy" class="secondary" type="button">Copiar resultado</button>
-            </div>
-            <textarea id="premium-output" class="premium-output" rows="7" readonly placeholder="Aqui veras el resumen o texto simplificado..."></textarea>
-        </section>
-
-        <section class="control" aria-label="Premium OCR">
-            <div class="label-row">
-                <span>Premium: OCR de Imagenes</span>
-            </div>
-            <label for="ocr-api-key" class="hint">API key OCR.Space (usa "helloworld" para pruebas).</label>
-            <input id="ocr-api-key" class="text-input" type="text" placeholder="Ingresa tu API key OCR">
-            <div class="site-actions premium-actions">
-                <button id="ocr-detect" class="secondary" type="button">Detectar texto en imagenes</button>
-                <button id="ocr-read" class="secondary" type="button">Leer OCR</button>
-                <button id="ocr-copy" class="secondary" type="button">Copiar OCR</button>
-            </div>
-            <textarea id="ocr-output" class="premium-output" rows="6" readonly placeholder="Aqui veras el texto detectado en imagenes..."></textarea>
         </section>
 
         <footer class="actions">
